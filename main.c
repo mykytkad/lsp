@@ -1,6 +1,33 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+
+
+
+/////////////////////////////////
+////Логика-----происходящего
+////////////////////////////
+////semaphore full - переполнение
+////--------- empty - опустощение
+////--------- mutex - исключение одновременных действий
+////////////////////////////////
+////код писателей
+//// wait(full)
+//// wait(mutex)
+//// добавить элемент к буферу
+//// signal(mutex)
+//// signal(empty)
+/////////////////////////////
+////код читателей
+//// wait(empty)
+//// wait(mutex)
+//// прочитать и удалить
+//// signal(mutex)
+//// signal(full)
+////////////////////////////
+
+
 typedef struct {
     pthread_cond_t cond;
     pthread_mutex_t mtx;
@@ -9,24 +36,21 @@ typedef struct {
 
 ////////////////////////////////////////
 
-#define SAM_INIT(n)                    \
-{                                      \
-    .cond = PTHREAD_COND_INITIALIZER,  \
-    .mtx  = PTHREAD_MUTEX_INITIALIZER, \
-    .N    = n                          \
-};
+
 
 ////////////////////////////////////////
 
-void sam_init(Sam * ps, int N) {
-pthread_mutex_init(&ps->mtx,NULL);
-pthread_cond_init(&ps->cond,NULL);
-ps->N = N;
+void sam_init(Sam * ps, int N)
+{
+    pthread_mutex_init(&ps->mtx,NULL);
+    pthread_cond_init(&ps->cond,NULL);
+    ps->N = N;
 }
 
 ////////////////////////////////////////
 
-void sam_destroy(Sam * ps) {
+void sam_destroy(Sam * ps)
+{
     pthread_cond_destroy(&ps->cond);
     pthread_mutex_destroy(&ps->mtx);
 
@@ -34,9 +58,11 @@ void sam_destroy(Sam * ps) {
 
 ////////////////////////////////////////
 
-void sam_acquire(Sam * ps) {
+void sam_acquire(Sam * ps)
+{
     pthread_mutex_lock(&ps->mtx);
-    while(ps->N == 0) {
+    while(ps->N == 0)
+    {
         pthread_cond_wait(&ps->cond,&ps->mtx);
     }
 
@@ -46,22 +72,25 @@ void sam_acquire(Sam * ps) {
 
 ////////////////////////////////////////
 
-void sam_release(Sam * ps) {
+void sam_release(Sam * ps)
+{
     pthread_mutex_lock(&ps->mtx);
     ++(ps->N);
     pthread_mutex_unlock(&ps->mtx);
     pthread_cond_signal(&ps->cond);
 }
 
-static const int elements = 100;
 
-typedef struct {
+#define MAX_ELEMENTS_IN_QUEUE  100
+
+typedef struct
+{
     int begin_pos;
     int last_pos;
-    int queue[100];
+    int queue[MAX_ELEMENTS_IN_QUEUE];
 } Queue;
 
-void init_q( Queue * q)
+void init_q(Queue * q)
 {
     q->begin_pos = 0;
     q->last_pos = 1;
@@ -92,16 +121,25 @@ void init_s(Strange *s)
 
 }
 ///////////////////////////
+
 static Queue que;
 
-void insert(Strange * str, int val )
+void insert(Strange * str, int val)
 {
     pthread_cond_wait(&str->full.cond, &str->full.mtx);
     sam_acquire(&str->mutex);
     que.queue[que.last_pos - 1] = val;
     que.last_pos ++;
-    if (que.last_pos == elements){que.last_pos = 0;}
-    if (que.last_pos == que.begin_pos){sam_acquire(&str->full);}
+    if (que.last_pos == MAX_ELEMENTS_IN_QUEUE)
+    {
+        que.last_pos = 0;
+    }
+
+    if (que.last_pos == que.begin_pos)
+    {
+        sam_acquire(&str->full);
+    }
+
     sam_release(&str->mutex);
     pthread_cond_signal(&str->empty.cond);
 }
@@ -116,7 +154,7 @@ static int sum = 0;
 
 
 
-void read(Strange * str  )
+void read(Strange * str)
 {
 
     pthread_cond_wait(&str->empty.cond, &str->empty.mtx);
@@ -125,14 +163,18 @@ void read(Strange * str  )
     val = que.queue[que.begin_pos];
     sum+=val;
     que.begin_pos++;
-    if(que.begin_pos == elements)
+    if(que.begin_pos == MAX_ELEMENTS_IN_QUEUE)
     {
         que.begin_pos = 0;
-        if(que.last_pos == 1){
+        if(que.last_pos == 1)
+        {
             sam_acquire(&str->empty);
         }
     }
-    if(que.begin_pos + 1 == que.last_pos){ sam_acquire(&str->empty); }
+    if(que.begin_pos + 1 == que.last_pos)
+    {
+        sam_acquire(&str->empty);
+    }
     sam_release(&str->mutex);
     pthread_cond_signal(&str->full.cond);
 }
@@ -153,7 +195,7 @@ void *thread_func_p(Strange  * str)
 
     return NULL;
 }
-void *thread_func_r(Strange * str)
+void* thread_func_r(Strange * str)
 {
     for(int i=0; i<4; i++)
     {
@@ -165,7 +207,7 @@ void *thread_func_r(Strange * str)
 int main()
 {
 
-    static Strange str;
+    Strange str;
     init_q(&que);
     init_s(&str);
     pthread_t threads[4];
@@ -177,7 +219,8 @@ int main()
 
     }
 
-    for(int i =0; i<4; i++){
+    for(int i =0; i<4; i++)
+    {
         pthread_join(threads[i], NULL);
     }
 
